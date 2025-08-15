@@ -1,0 +1,41 @@
+version: "3"
+
+services:
+  mysql8:
+    image: mysql:8.0
+    restart: always
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --binlog-format=ROW
+      - --server-id=1
+      - --max_connections=500
+      - --lower-case-table-names=0  # 0=区分大小写，1=不区分大小写，windows默认不区分，所以要设置一下
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_INNODB_BUFFER_POOL_SIZE: "1G"
+      MYSQL_INNODB_LOG_BUFFER_SIZE: "64M"
+      MYSQL_BULK_INSERT_BUFFER_SIZE: "256M" # 批量插入专用内存
+      MYSQL_INNODB_FLUSH_LOG_AT_TRX_COMMIT: "0" # 事务日志刷新策略(0=性能优先，可能会丢失1秒日志)
+      MYSQL_INNODB_AUTOCOMMIT: "0" # 禁用自动提交提升批量效率
+    volumes:
+      - ./scripts/mysql/:/docker-entrypoint-initdb.d/
+    ports:
+      - 3306:3306
+    
+  redis:
+    image: "bitnami/redis:latest"
+    restart: always
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+    ports:
+      - "6379:6379"
+
+  etcd:
+    image: "bitnami/etcd:latest"
+    restart: always
+    volumes:
+      - "./scripts/etcd_data:/etcd-data"
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+    ports:
+      - "2379:2379"
