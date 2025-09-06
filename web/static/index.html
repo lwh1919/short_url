@@ -211,16 +211,41 @@
     async function checkServiceStatus() {
         try {
             const response = await fetch('/api/health', { method: 'GET' });
-            if (response.ok) {
-                serviceStatus.textContent = '正常';
-                serviceStatus.style.color = '#28a745';
+            const data = await response.json(); // 获取响应数据
+            
+            // 无论HTTP状态码是什么，都优先根据JSON内容里的status字段来判断
+            if (data && data.status) {
+                switch(data.status) {
+                    case 'ok':
+                        serviceStatus.textContent = '正常';
+                        serviceStatus.style.color = '#28a745';
+                        break;
+                    case 'degraded':
+                        serviceStatus.textContent = '降级';
+                        serviceStatus.style.color = '#ffc107';
+                        break;
+                    case 'unavailable':
+                        serviceStatus.textContent = '不可用';
+                        serviceStatus.style.color = '#dc3545';
+                        break;
+                    default:
+                        serviceStatus.textContent = '未知';
+                        serviceStatus.style.color = '#6c757d';
+                }
             } else {
-                serviceStatus.textContent = '异常';
-                serviceStatus.style.color = '#dc3545';
+                // 如果JSON里没有status字段，再根据HTTP状态码判断
+                if (response.ok) {
+                    serviceStatus.textContent = '未知';
+                    serviceStatus.style.color = '#6c757d';
+                } else {
+                    serviceStatus.textContent = '异常';
+                    serviceStatus.style.color = '#dc3545';
+                }
             }
         } catch (error) {
             serviceStatus.textContent = '连接失败';
             serviceStatus.style.color = '#dc3545';
+            console.error('健康检查失败:', error);
         }
     }
 
@@ -311,7 +336,7 @@
     checkServiceStatus();
 
     // 定期检查服务状态
-    setInterval(checkServiceStatus, 30000); // 每30秒检查一次
+    setInterval(checkServiceStatus, 2000); // 每30秒检查一次
 </script>
 </body>
 </html>

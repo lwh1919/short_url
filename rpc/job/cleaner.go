@@ -27,5 +27,16 @@ func (j *CleanerJob) Name() string {
 func (j *CleanerJob) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), j.timeout)
 	defer cancel()
-	return j.svc.CleanExpired(ctx)
+
+	// 清理过期短链接
+	if err := j.svc.CleanExpired(ctx); err != nil {
+		return err
+	}
+
+	// 重建布隆过滤器
+	if err := j.svc.RebuildBloomFilter(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

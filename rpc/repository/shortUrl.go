@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"short_url_rpc_study/rpc/repository/cache"
 	"short_url_rpc_study/rpc/repository/dao"
@@ -16,6 +17,7 @@ type CachedShortUrlRepository struct {
 	lru           *lru.Cache
 	lruExpiration time.Duration
 	cache         cache.ShortUrlCache
+	bloomFilter   cache.BloomFilterCache
 	dao           dao.ShortUrlDAO
 	l             logger.Logger
 	requestGroup  singleflight.Group
@@ -33,7 +35,7 @@ var (
 	ErrUniqueIndexConflict = dao.ErrUniqueIndexConflict
 )
 
-func NewCachedShortUrlRepository(lruSize int, lruExpiration time.Duration, cache cache.ShortUrlCache, dao dao.ShortUrlDAO, l logger.Logger) ShortUrlRepository {
+func NewCachedShortUrlRepository(lruSize int, lruExpiration time.Duration, cache cache.ShortUrlCache, bloomFilter cache.BloomFilterCache, dao dao.ShortUrlDAO, l logger.Logger) ShortUrlRepository {
 	lru, err := lru.NewSimpleLRU(lruSize)
 	if err != nil {
 		panic(err)
@@ -42,6 +44,7 @@ func NewCachedShortUrlRepository(lruSize int, lruExpiration time.Duration, cache
 		lru:           lru,
 		lruExpiration: lruExpiration,
 		cache:         cache,
+		bloomFilter:   bloomFilter,
 		dao:           dao,
 		l:             l,
 		requestGroup:  singleflight.Group{},
@@ -64,7 +67,7 @@ func (c *CachedShortUrlRepository) GetOriginUrlByShortUrl(ctx context.Context, s
 		originUrl, err := c.cache.Get(ctx, shortUrl)
 		if err == nil {
 			go func() {
-				newCtx, cancel := context.WithTimeout(ctx, time.Second)
+				newCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
 
 				if err := c.cache.Refresh(newCtx, shortUrl); err == nil {
@@ -87,14 +90,51 @@ func (c *CachedShortUrlRepository) GetOriginUrlByShortUrl(ctx context.Context, s
 			logger.String("short_url", shortUrl),
 		)
 
+		// 在查询数据库之前，先检查布隆过滤器
+		c.l.Info("布隆过滤器运作")
+		initialized, err := c.bloomFilter.IsInitialized(ctx)
+		if err != nil {
+			c.l.Error("failed to check bloom filter initialization",
+				logger.Error(err),
+				logger.String("short_url", shortUrl),
+			)
+			// 无法检查初始化状态，继续查询数据库（降级处理）
+			c.l.Warn("falling back to database query due to bloom filter initialization check failure",
+				logger.String("short_url", shortUrl),
+			)
+		} else if !initialized {
+			// 布隆过滤器未初始化，跳过布隆过滤器检查，直接查询数据库
+			c.l.Warn("bloom filter not initialized, skipping bloom filter check",
+				logger.String("short_url", shortUrl),
+			)
+		} else {
+			// 布隆过滤器已初始化，进行正常的布隆过滤器检查
+			exists, err := c.bloomFilter.Exist(ctx, shortUrl)
+			if err != nil {
+				c.l.Error("bloom filter check failed",
+					logger.Error(err),
+					logger.String("short_url", shortUrl),
+				)
+				// 布隆过滤器检查失败，继续查询数据库（降级处理）
+				c.l.Warn("falling back to database query due to bloom filter failure",
+					logger.String("short_url", shortUrl),
+				)
+			} else if !exists {
+				// 布隆过滤器显示短链接不存在，直接返回错误
+				// 注意：这里可能存在假阳性，但为了性能考虑，我们信任布隆过滤器的结果
+				return "", fmt.Errorf("short url not found: %s", shortUrl)
+			}
+		}
+
 		// 若 redis 读取失败，从数据库读取并更新本地 lru 缓存和 redis 缓存
 		su, err := c.dao.FindByShortUrlWithExpired(ctx, shortUrl, now)
+		fmt.Println("查询数据库")
 		if err != nil {
 			return "", err
 		}
-
+		fmt.Println(c.bloomFilter.Exist(ctx, shortUrl))
 		go func() {
-			newCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			newCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 
 			// 异步更新 redis 缓存
@@ -122,18 +162,38 @@ func (c *CachedShortUrlRepository) GetOriginUrlByShortUrl(ctx context.Context, s
 }
 
 func (c *CachedShortUrlRepository) InsertShortUrl(ctx context.Context, shortUrl, originUrl string) error {
-	return c.dao.Insert(ctx, dao.ShortUrl{
+	// 插入数据库
+	err := c.dao.Insert(ctx, dao.ShortUrl{
 		ShortUrl:  shortUrl,
 		OriginUrl: originUrl,
 		ExpiredAt: time.Now().AddDate(1, 0, 0).Unix(), // 有效期一年
 	})
+	if err != nil {
+		return err
+	}
+
+	// 异步添加到布隆过滤器
+	go func() {
+		// 使用独立上下文执行异步布隆过滤器更新，避免被请求上下文取消
+		newCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		if err := c.bloomFilter.Set(newCtx, shortUrl); err != nil {
+			c.l.Error("failed to add to bloom filter",
+				logger.Error(err),
+				logger.String("short_url", shortUrl),
+			)
+		}
+	}()
+
+	return nil
 }
 
 func (c *CachedShortUrlRepository) DeleteShortUrlByShortUrl(ctx context.Context, shortUrl string) error {
 	err := c.dao.DeleteByShortUrl(ctx, shortUrl)
 	if err == nil {
 		go func() {
-			newCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+			newCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 			defer cancel()
 
 			// 异步删除 redis 缓存
@@ -146,6 +206,7 @@ func (c *CachedShortUrlRepository) DeleteShortUrlByShortUrl(ctx context.Context,
 		}()
 		// 同步删除本地 lru 缓存
 		c.lru.Remove(shortUrl)
+
 	}
 	return err
 }
@@ -170,4 +231,30 @@ func (c *CachedShortUrlRepository) CleanExpired(ctx context.Context, now int64) 
 		}()
 	}
 	return err
+}
+
+// RebuildBloomFilter 重建布隆过滤器
+func (c *CachedShortUrlRepository) RebuildBloomFilter(ctx context.Context) error {
+	// 获取所有未过期的短链接
+	shortUrls, err := c.dao.FindAllValidShortUrls(ctx, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("failed to get valid short urls: %w", err)
+	}
+
+	// 提取短链接字符串
+	shortUrlList := make([]string, 0, len(shortUrls))
+	for _, su := range shortUrls {
+		shortUrlList = append(shortUrlList, su.ShortUrl)
+	}
+
+	// 重建布隆过滤器
+	if err := c.bloomFilter.Rebuild(ctx, shortUrlList); err != nil {
+		return fmt.Errorf("failed to rebuild bloom filter: %w", err)
+	}
+
+	c.l.Info("bloom filter rebuilt successfully",
+		logger.Int("total_short_urls", len(shortUrlList)),
+	)
+
+	return nil
 }

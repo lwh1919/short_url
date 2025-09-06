@@ -2,42 +2,38 @@ package ioc
 
 import (
 	"context"
+	"short_url_rpc_study/web/middlewares"
+	"short_url_rpc_study/web/pkg"
+	"short_url_rpc_study/web/routes"
+	"strings"
+	"time"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"github.com/to404hanga/pkg404/logger"
-	"short_url_rpc_study/web/middlewares"
-	"short_url_rpc_study/web/routes"
-	"strings"
-	"time"
 )
 
-func InitWebServer(mdls []gin.HandlerFunc, api *routes.ApiHandler, server *routes.ServerHandler) *gin.Engine {
+func InitWebServer(mdls []gin.HandlerFunc, api *routes.ApiHandler, server *routes.ServerHandler, health *routes.HealthHandler) *gin.Engine {
 	router := gin.Default()
 	router.MaxMultipartMemory = 1024 * 1024 * 1024 * 2
 
 	router.Use(mdls...)
 
 	// 获取项目根目录
-	projectRoot := "C:/Users/linweihao/Desktop/short_url_rpc_study/web"
+	projectRoot := "C:/Users/linweihao/Desktop/demo/st/short_url_rpc_study/web"
 
 	// 静态文件服务
 	router.Static("/static", projectRoot+"/static")
 
-	// 健康检查接口
-	router.GET("/api/health", func(ctx *gin.Context) {
-		ctx.JSON(200, gin.H{"status": "ok", "timestamp": time.Now().Unix()})
-	})
+	// 注册路由
+	health.RegisterRoutes(router)
+	api.RegisterRoutes(router)
+	server.RegisterRoutes(router)
 
 	// 根路径返回前端页面
 	router.GET("/", func(ctx *gin.Context) {
 		ctx.File(projectRoot + "/static/index.html")
-	})
-
-	api.RegisterRoutes(router)
-	server.RegisterRoutes(router)
-	router.GET("/ping", func(ctx *gin.Context) {
-		ctx.String(200, "Pong")
 	})
 
 	return router
@@ -55,7 +51,7 @@ func timeout() gin.HandlerFunc {
 	}
 }
 
-func InitGinMiddleware(l logger.Logger) []gin.HandlerFunc {
+func InitGinMiddleware(l logger.Logger, limiter pkg.RateLimiter) []gin.HandlerFunc {
 	hf := []gin.HandlerFunc{
 		cors.New(cors.Config{
 			AllowCredentials: true,
@@ -69,6 +65,13 @@ func InitGinMiddleware(l logger.Logger) []gin.HandlerFunc {
 			MaxAge: 12 * time.Hour,
 		}),
 		timeout(),
+		// 添加全局限流中间件 - 控制总并发量
+		middlewares.NewRateLimiter(limiter, middlewares.RateLimitConfig{
+			KeyGenerator: func(c *gin.Context) string {
+				// 返回固定key，实现全局限流
+				return "global"
+			},
+		}),
 		// middlewares.ZapLogger(l),
 	}
 

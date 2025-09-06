@@ -29,7 +29,7 @@ type GormShortUrlDAO struct {
 	wg            sync.WaitGroup  // 用于等待worker完成
 	stopChan      chan struct{}   // 用于停止worker
 	flushPool     sync.Pool       // 用于批量处理的slice池
-	flushChan     chan []ShortUrl // 用于异步刷新
+	flushChan     chan []ShortUrl // 用于异步刷新元素类型为 []ShortUrl 切片
 	mu            sync.Mutex      // 保护缓冲区访问
 }
 
@@ -476,6 +476,36 @@ func (g *GormShortUrlDAO) DeleteExpiredList(ctx context.Context, now int64) ([]s
 		})
 	}
 	return retList, group.Wait()
+}
+
+// FindAllValidShortUrls 获取所有未过期的短链接
+func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) ([]ShortUrl, error) {
+	var (
+		sus  []ShortUrl
+		lock sync.Mutex
+	)
+
+	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+		var internalSus []ShortUrl
+		err := db.WithContext(iCtx).
+			Table(g.tableName(suffix)).
+			Where("expired_at > ?", now).
+			Find(&internalSus).Error
+		if err != nil {
+			g.l.Error("FindAllValidShortUrls failed",
+				logger.Error(err),
+				logger.String("suffix", suffix),
+				logger.Int64("expired_at", now),
+			)
+			return err
+		}
+		lock.Lock()
+		sus = append(sus, internalSus...)
+		lock.Unlock()
+		return nil
+	})
+
+	return sus, nil
 }
 
 func (g *GormShortUrlDAO) Transaction(ctx context.Context, fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error {

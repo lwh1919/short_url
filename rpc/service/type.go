@@ -6,4 +6,5 @@ type ShortUrlService interface {
 	Create(ctx context.Context, originUrl string) (string, error)
 	Redirect(ctx context.Context, shortUrl string) (string, error)
 	CleanExpired(ctx context.Context) error
+	RebuildBloomFilter(ctx context.Context) error
 }

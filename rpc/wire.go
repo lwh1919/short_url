@@ -19,6 +19,8 @@ func Init() *App {
 
 		dao.NewGormShortUrlDAO,
 
+		ioc.InitBloomFilter,
+		ioc.InitBloomFilterCache,
 		ioc.InitRedisCache,
 		ioc.InitCachedRepository,
 		ioc.InitService,

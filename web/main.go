@@ -1,20 +1,31 @@
 package main
 
 import (
+	"path/filepath"
+
+	"github.com/gin-gonic/gin"
+
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"path/filepath"
 )
+
+// App 应用结构体
+type App struct {
+	Engine *gin.Engine
+}
 
 func main() {
 	initViperWatch()
-	app := Init()
-	if err := app.Run(viper.GetString("app.addr")); err != nil {
+	app, err := Init()
+	if err != nil {
+		panic(err)
+	}
+	if err := app.Engine.Run(viper.GetString("app.addr")); err != nil {
 		panic(err)
 	}
 }
 
-const projectRoot = "C:/Users/linweihao/Desktop/short_url_rpc_study/web"
+const projectRoot = "C:/Users/linweihao/Desktop/demo/st/short_url_rpc_study/web"
 
 func initViperWatch() {
 	cfile := pflag.String("config",

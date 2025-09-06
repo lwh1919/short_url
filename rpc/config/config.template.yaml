@@ -10,7 +10,7 @@ db:
   skipDefaultTransaction: false   # 是否跳过默认事务
 redis:
   host: "localhost"
-  port: "6379"
+  port: 6379
   prefix: "short_url"            # Key前缀（环境隔离）
   expiration: 86400              # 默认缓存时间（24小时）
   poolSize: 1000                 # 连接池最大连接数
@@ -23,6 +23,10 @@ lru:
   size: 500000                   # 固定缓存条目数
   percentage: 3                  # 内存占比（备用）
   expiration: 28800              # 缓存过期时间（8小时）
+bloom_filter:
+  m: 1000000                     # 位数组大小（约100万个元素）
+  k: 7                           # 哈希函数数量
+  key: "short_url_bloom_filter"  # Redis中的key名称
 log:
   mode: "dev"                   # 生产模式
   outputPaths:
@@ -30,7 +34,7 @@ log:
   errorOutputPaths:
     - "./log/error_output.txt"   # 错误日志路径
 short_url:
-  suffix: "_TO404HANGA"          # 短链后缀
+  suffix: "_LWH"          # 短链后缀
   weights: [1009, 1231, 1031, 1013, 1019, 1021] # 哈希权重
 job:
   timeout: 30                     # 任务超时时间（秒）
@@ -40,7 +44,7 @@ grpc:
   server:
     port: 0                       # 自动分配端口
     etcdTTL: 60                    # 服务注册TTL（秒）
-    etcdAddr: "127.0.0.1:2379"      # etcd地址
+    etcdAddr: "127.0.0.1:22380"      # etcd地址
 etcd:
   endpoints:
-    - "127.0.0.1:2379"            # etcd集群节点
+    - "127.0.0.1:22380"            # etcd集群节点

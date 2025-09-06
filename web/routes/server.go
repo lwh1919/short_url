@@ -1,10 +1,14 @@
 package routes
 
 import (
+	"fmt"
+	"github.com/afex/hystrix-go/hystrix"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/singleflight"
-	"short_url_rpc_study/pkg/generator"
+	"log"
+	"net/http"
 	short_url_v1 "short_url_rpc_study/proto/short_url/v1"
+	"time"
 )
 
 type ServerHandler struct {
@@ -29,23 +33,56 @@ func (sh *ServerHandler) RegisterRoutes(srv *gin.Engine) {
 
 func (h *ServerHandler) Redirect(ctx *gin.Context) {
 	shortUrl := ctx.Param("short_url")
-	if ok := generator.CheckShortUrl(shortUrl, h.weights); !ok {
-		ctx.JSON(404, gin.H{"error": "Short URL not found"})
-		return
-	}
-	//请求合并层 (防缓存击穿)
-	result, err, _ := h.requestGroup.Do(shortUrl, func() (interface{}, error) {
-		resp, err := h.svc.GetOriginUrl(ctx, &short_url_v1.GetOriginUrlRequest{
-			ShortUrl: shortUrl,
+
+	// 使用带降级的熔断器保护RPC调用
+	err := hystrix.Do("short_url",
+		func() error {
+			// 请求合并层 (防缓存击穿)
+			result, err, _ := h.requestGroup.Do(shortUrl, func() (interface{}, error) {
+				resp, err := h.svc.GetOriginUrl(ctx, &short_url_v1.GetOriginUrlRequest{
+					ShortUrl: shortUrl,
+				})
+				if err != nil {
+					return "", err
+				}
+				return resp.GetOriginUrl(), nil
+			})
+
+			if err != nil {
+				return err
+			}
+
+			// 重定向到原始URL
+			ctx.Redirect(301, result.(string))
+			return nil
+		},
+		// 降级处理逻辑
+		func(err error) error {
+			// 记录降级日志
+			log.Printf("[ServerHandler] Fallback triggered for short URL: %s And err: %s", shortUrl, err.Error())
+			// 重定向到维护页面
+			ctx.Redirect(302, "/static/maintenance.html")
+			return nil
 		})
-		if err != nil {
-			return "", err
-		}
-		return resp.GetOriginUrl(), nil
-	})
+
 	if err != nil {
-		ctx.JSON(500, gin.H{"error": err.Error()})
-		return
+		// 使用状态码判断错误类型
+		var msg string
+		switch err {
+		case hystrix.ErrCircuitOpen:
+			// 熔断器已打开错误
+			msg = fmt.Sprintf("Circuit open error:", err.Error())
+		case hystrix.ErrMaxConcurrency:
+			// 超过最大并发数错误
+			msg = fmt.Sprintf("Max concurrency error:", err.Error())
+		default:
+			msg = fmt.Sprintf("Other error:", err.Error())
+		}
+		// 记录错误日志
+		log.Printf("[ServerHandler] RPC error [code=%s]: %v", msg)
+		ctx.JSON(http.StatusNotFound, gin.H{
+			"error":     msg,
+			"timestamp": time.Now().Unix(),
+		})
 	}
-	ctx.Redirect(301, result.(string))
 }

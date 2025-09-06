@@ -2,10 +2,11 @@ package service
 
 import (
 	"context"
-	"github.com/to404hanga/pkg404/logger"
 	"short_url_rpc_study/pkg/generator"
 	"short_url_rpc_study/rpc/repository"
 	"time"
+
+	"github.com/to404hanga/pkg404/logger"
 )
 
 type CachedShortUrlService struct {
@@ -48,4 +49,8 @@ func (s *CachedShortUrlService) Redirect(ctx context.Context, shortUrl string) (
 func (s *CachedShortUrlService) CleanExpired(ctx context.Context) error {
 	now := time.Now().Unix()
 	return s.repo.CleanExpired(ctx, now)
+}
+
+func (s *CachedShortUrlService) RebuildBloomFilter(ctx context.Context) error {
+	return s.repo.RebuildBloomFilter(ctx)
 }

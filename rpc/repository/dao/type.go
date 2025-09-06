@@ -3,6 +3,7 @@ package dao
 import (
 	"context"
 	"database/sql"
+
 	"gorm.io/gorm"
 )
 
@@ -16,6 +17,7 @@ type ShortUrlDAO interface {
 	Insert(ctx context.Context, su ShortUrl) error
 	FindByShortUrl(ctx context.Context, shortUrl string) (ShortUrl, error)
 	FindByShortUrlWithExpired(ctx context.Context, shortUrl string, now int64) (ShortUrl, error)
+	FindAllValidShortUrls(ctx context.Context, now int64) ([]ShortUrl, error)
 
 	DeleteByShortUrl(ctx context.Context, shortUrl string) error
 	DeleteExpiredList(ctx context.Context, now int64) ([]string, error)

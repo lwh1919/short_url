@@ -3,24 +3,25 @@
 package main
 
 import (
+	"github.com/google/wire"
 	"short_url_rpc_study/web/ioc"
 	"short_url_rpc_study/web/routes"
-
-	"github.com/gin-gonic/gin"
-	"github.com/google/wire"
 )
 
-func Init() *gin.Engine {
+func Init() (*App, error) {
 	wire.Build(
-		ioc.InitShortUrlClient,
-		ioc.InitEtcdClient,
 		ioc.InitLogger,
-
-		routes.NewApiHandler,
+		ioc.InitHystrix,
+		ioc.InitRedis,
+		ioc.InitRateLimiter,
+		ioc.InitEtcdClient,
+		ioc.InitShortUrlClient,
 		ioc.InitServerHandler,
-
 		ioc.InitGinMiddleware,
 		ioc.InitWebServer,
+		routes.NewApiHandler,
+		routes.NewHealthHandler,
+		wire.Struct(new(App), "*"),
 	)
-	return gin.Default()
+	return nil, nil
 }

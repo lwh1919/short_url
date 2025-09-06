@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务暂时不可用</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+            font-size: 2rem;
+        }
+
+        .message {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .retry-time {
+            margin-top: 1.5rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="icon">🛠️</div>
+    <div class="header">
+        <h1>服务暂时不可用</h1>
+    </div>
+    <div class="message">
+        <p>很抱歉，我们的服务目前正在经历一些技术问题。</p>
+        <p>我们的技术团队正在努力解决这个问题，请稍后再试。</p>
+    </div>
+    <a href="/" class="btn">返回首页</a>
+    <div class="retry-time">
+        <p>预计恢复时间: <span id="recoveryTime">30秒后</span></p>
+    </div>
+</div>
+
+<script>
+    // 自动倒计时
+    let seconds = 30;
+    const recoveryTimeElement = document.getElementById('recoveryTime');
+    
+    function updateCountdown() {
+        seconds--;
+        if (seconds <= 0) {
+            recoveryTimeElement.textContent = '正在尝试重新连接...';
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            recoveryTimeElement.textContent = `${seconds}秒后`;
+            setTimeout(updateCountdown, 1000);
+        }
+    }
+    
+    setTimeout(updateCountdown, 1000);
+</script>
+</body>
+</html>
