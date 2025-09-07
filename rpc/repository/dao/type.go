@@ -2,9 +2,6 @@ package dao
 
 import (
 	"context"
-	"database/sql"
-
-	"gorm.io/gorm"
 )
 
 type ShortUrl struct {
@@ -21,6 +18,4 @@ type ShortUrlDAO interface {
 
 	DeleteByShortUrl(ctx context.Context, shortUrl string) error
 	DeleteExpiredList(ctx context.Context, now int64) ([]string, error)
-	Transaction(ctx context.Context, fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error
-	WithTransaction(ctx context.Context, fc func(txDAO ShortUrlDAO) error, opts ...*sql.TxOptions) error
 }

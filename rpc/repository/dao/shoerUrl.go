@@ -2,7 +2,6 @@ package dao
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"short_url_rpc_study/pkg/generator"
@@ -508,15 +507,3 @@ func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) 
 	return sus, nil
 }
 
-func (g *GormShortUrlDAO) Transaction(ctx context.Context, fc func(tx *gorm.DB) error, opts ...*sql.TxOptions) error {
-	return g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return fc(tx)
-	}, opts...)
-}
-
-func (g *GormShortUrlDAO) WithTransaction(ctx context.Context, fc func(txDAO ShortUrlDAO) error, opts ...*sql.TxOptions) error {
-	return g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txDAO := &GormShortUrlDAO{db: tx}
-		return fc(txDAO)
-	}, opts...)
-}
