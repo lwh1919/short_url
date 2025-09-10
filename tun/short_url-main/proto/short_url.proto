@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package short_url.v1;
+option go_package = "short_url/v1;short_url_v1";
+
+service ShortUrlService {
+    rpc GenerateShortUrl(GenerateShortUrlRequest) returns (GenerateShortUrlResponse);
+    rpc GetOriginUrl(GetOriginUrlRequest) returns (GetOriginUrlResponse);
+}
+
+message GenerateShortUrlRequest {
+    string origin_url = 1;
+}
+
+message GenerateShortUrlResponse {
+    string short_url = 1;
+}
+
+message GetOriginUrlRequest {
+    string short_url = 1;
+}
+
+message GetOriginUrlResponse {
+    string origin_url = 1;
+}
