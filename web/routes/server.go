@@ -7,7 +7,8 @@ import (
 	"golang.org/x/sync/singleflight"
 	"log"
 	"net/http"
-	short_url_v1 "short_url_rpc_study/proto/short_url/v1"
+	"short_url/pkg/generator"
+	short_url_v1 "short_url/proto/short_url/v1"
 	"time"
 )
 
@@ -33,7 +34,10 @@ func (sh *ServerHandler) RegisterRoutes(srv *gin.Engine) {
 
 func (h *ServerHandler) Redirect(ctx *gin.Context) {
 	shortUrl := ctx.Param("short_url")
-
+	if ok := generator.CheckShortUrl(shortUrl, h.weights); !ok {
+		ctx.JSON(404, gin.H{"error": "Short URL not found"})
+		return
+	}
 	// 使用带降级的熔断器保护RPC调用
 	err := hystrix.Do("short_url",
 		func() error {

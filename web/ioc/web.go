@@ -2,9 +2,9 @@ package ioc
 
 import (
 	"context"
-	"short_url_rpc_study/web/middlewares"
-	"short_url_rpc_study/web/pkg"
-	"short_url_rpc_study/web/routes"
+	"short_url/web/middlewares"
+	"short_url/web/pkg"
+	"short_url/web/routes"
 	"strings"
 	"time"
 
@@ -21,7 +21,7 @@ func InitWebServer(mdls []gin.HandlerFunc, api *routes.ApiHandler, server *route
 	router.Use(mdls...)
 
 	// 获取项目根目录
-	projectRoot := "C:/Users/linweihao/Desktop/demo/st/short_url_rpc_study/web"
+	projectRoot := "C:\\Users\\linweihao\\Desktop\\demo\\st\\tt\\short_url-main\\web"
 
 	// 静态文件服务
 	router.Static("/static", projectRoot+"/static")
@@ -78,6 +78,5 @@ func InitGinMiddleware(l logger.Logger, limiter pkg.RateLimiter) []gin.HandlerFu
 	if viper.GetString("log.mode") == "dev" {
 		hf = append(hf, middlewares.ZapLogger(l))
 	}
-
 	return hf
 }

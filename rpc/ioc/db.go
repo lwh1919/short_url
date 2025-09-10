@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"short_url_rpc_study/pkg/generator"
-	"short_url_rpc_study/rpc/repository/dao"
+	"short_url/pkg/generator"
+	"short_url/rpc/repository/dao"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -18,8 +18,6 @@ import (
 	"gorm.io/sharding"
 )
 
-// 操，这个中间件竟然会生成1到z的62张表
-// 功能：动态路由表，自动创建表
 func InitDB(l logger.Logger, cmd redis.Cmdable) *gorm.DB {
 	type Config struct {
 		User                   string `yaml:"user"`
@@ -38,8 +36,7 @@ func InitDB(l logger.Logger, cmd redis.Cmdable) *gorm.DB {
 		panic(err)
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: cfg.SkipDefaultTransaction,
 		NamingStrategy: schema.NamingStrategy{

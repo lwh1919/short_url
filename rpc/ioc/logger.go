@@ -1,7 +1,7 @@
 package ioc
 
 import (
-	"short_url_rpc_study/pkg/logfile"
+	"short_url/pkg/logfile"
 
 	"github.com/spf13/viper"
 	"github.com/to404hanga/pkg404/logger"

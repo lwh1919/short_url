@@ -2,7 +2,7 @@ app:
   addr: ":8080"
 
 log:
-  mode: "dev"
+  mode: "prod"
   outputPaths:
     - "./log/log.txt"
   errorOutputPaths:
@@ -10,7 +10,7 @@ log:
 
 etcd:
   addrs:
-    - "localhost:22380"
+    - "localhost:22382"
 
 grpc:
   client:
@@ -21,26 +21,16 @@ grpc:
 short_url:
   weights: [1009, 1231, 1031, 1013, 1019, 1021]
 
-hystrix:
-  Timeout:                2000
-  MaxConcurrentRequests:  1
-  SleepWindow:            2000
-  RequestVolumeThreshold: 5
-  ErrorPercentThreshold:  10
-
-redis:
-  host: "localhost"
-  port: 6379
-  prefix: "short_url_web"      # Web层Redis key前缀
-  poolSize: 1000               # 连接池最大连接数
-  minIdleConns: 100            # 最小空闲连接
-  maxIdleConns: 500            # 最大空闲连接
-  dialTimeout: 5000            # 连接超时（5秒）
-  readTimeout: 2000            # 读超时（2秒）
-  writeTimeout: 2000           # 写超时（2秒）
 
 rate_limit:
-  rate: 100ms                  # 令牌生成速率（1000ms一个令牌 = 1 QPS）
-  capacity: 5                   # 桶容量（1个令牌，严格限速）
+  rate: 1ms                    # 令牌生成速率（1ms一个令牌 = 1000 QPS）
+  capacity: 10000               # 桶容量（10000个令牌，大容量）
   expire: 10m                   # key过期时间（10分钟）
   prefix: "rate_limit"          # 限流器key前缀
+
+hystrix:
+  Timeout:                10000
+  MaxConcurrentRequests:  2000
+  SleepWindow:            2000
+  RequestVolumeThreshold: 1000
+  ErrorPercentThreshold:  50

@@ -1,11 +1,11 @@
 package ioc
 
 import (
-	"github.com/to404hanga/pkg404/logger"
-	grpc2 "short_url_rpc_study/rpc/grpc"
+	grpc2 "short_url/rpc/grpc"
 
 	"github.com/spf13/viper"
 	"github.com/to404hanga/pkg404/grpcx"
+	"github.com/to404hanga/pkg404/logger"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )

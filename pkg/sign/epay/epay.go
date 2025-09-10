@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"short_url_rpc_study/pkg/sign"
+	"short_url/pkg/sign"
 	"sort"
 	"strings"
 )

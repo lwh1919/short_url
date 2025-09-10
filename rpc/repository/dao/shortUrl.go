@@ -522,3 +522,33 @@ func (g *GormShortUrlDAO) WithTransaction(ctx context.Context, fc func(txDAO Sho
 		return fc(txDAO)
 	}, opts...)
 }
+
+// FindAllValidShortUrls 获取所有未过期的短链接
+func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) ([]ShortUrl, error) {
+	var (
+		sus  []ShortUrl
+		lock sync.Mutex
+	)
+
+	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+		var internalSus []ShortUrl
+		err := db.WithContext(iCtx).
+			Table(g.tableName(suffix)).
+			Where("expired_at > ?", now).
+			Find(&internalSus).Error
+		if err != nil {
+			g.l.Error("FindAllValidShortUrls failed",
+				logger.Error(err),
+				logger.String("suffix", suffix),
+				logger.Int64("expired_at", now),
+			)
+			return err
+		}
+		lock.Lock()
+		sus = append(sus, internalSus...)
+		lock.Unlock()
+		return nil
+	})
+
+	return sus, nil
+}

@@ -3,12 +3,14 @@
 package main
 
 import (
+	"short_url/web/ioc"
+	"short_url/web/routes"
+
+	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
-	"short_url_rpc_study/web/ioc"
-	"short_url_rpc_study/web/routes"
 )
 
-func Init() (*App, error) {
+func Init() *gin.Engine {
 	wire.Build(
 		ioc.InitLogger,
 		ioc.InitHystrix,

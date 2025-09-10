@@ -3,7 +3,7 @@ package middlewares
 import (
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"short_url_rpc_study/web/pkg"
+	"short_url/web/pkg"
 )
 
 // RateLimitConfig 限流中间件配置

@@ -2,7 +2,7 @@ package job
 
 import (
 	"context"
-	"short_url_rpc_study/rpc/service"
+	"short_url/rpc/service"
 	"time"
 )
 
@@ -27,7 +27,6 @@ func (j *CleanerJob) Name() string {
 func (j *CleanerJob) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), j.timeout)
 	defer cancel()
-
 	// 清理过期短链接
 	if err := j.svc.CleanExpired(ctx); err != nil {
 		return err

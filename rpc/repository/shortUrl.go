@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
-	"short_url_rpc_study/rpc/repository/cache"
-	"short_url_rpc_study/rpc/repository/dao"
+	"short_url/rpc/repository/cache"
+	"short_url/rpc/repository/dao"
 	"time"
 
 	"github.com/to404hanga/pkg404/cachex/lru"
@@ -36,7 +36,7 @@ var (
 )
 
 func NewCachedShortUrlRepository(lruSize int, lruExpiration time.Duration, cache cache.ShortUrlCache, bloomFilter cache.BloomFilterCache, dao dao.ShortUrlDAO, l logger.Logger) ShortUrlRepository {
-	lru, err := lru.NewSimpleLRU(lruSize)
+	lru, err := lru.New(lruSize)
 	if err != nil {
 		panic(err)
 	}
@@ -49,6 +49,7 @@ func NewCachedShortUrlRepository(lruSize int, lruExpiration time.Duration, cache
 		l:             l,
 		requestGroup:  singleflight.Group{},
 	}
+
 }
 
 func (c *CachedShortUrlRepository) GetOriginUrlByShortUrl(ctx context.Context, shortUrl string) (string, error) {
@@ -162,6 +163,7 @@ func (c *CachedShortUrlRepository) GetOriginUrlByShortUrl(ctx context.Context, s
 }
 
 func (c *CachedShortUrlRepository) InsertShortUrl(ctx context.Context, shortUrl, originUrl string) error {
+
 	// 插入数据库
 	err := c.dao.Insert(ctx, dao.ShortUrl{
 		ShortUrl:  shortUrl,
@@ -171,8 +173,8 @@ func (c *CachedShortUrlRepository) InsertShortUrl(ctx context.Context, shortUrl,
 	if err != nil {
 		return err
 	}
-
-	// 异步添加到布隆过滤器
+	//每一条都开协程去处理太麻烦了，这里应该优化为协程池消息处理，但是暂时注释，先进性测试
+	//异步添加到布隆过滤器
 	go func() {
 		// 使用独立上下文执行异步布隆过滤器更新，避免被请求上下文取消
 		newCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -193,7 +195,7 @@ func (c *CachedShortUrlRepository) DeleteShortUrlByShortUrl(ctx context.Context,
 	err := c.dao.DeleteByShortUrl(ctx, shortUrl)
 	if err == nil {
 		go func() {
-			newCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			newCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
 
 			// 异步删除 redis 缓存
@@ -206,7 +208,6 @@ func (c *CachedShortUrlRepository) DeleteShortUrlByShortUrl(ctx context.Context,
 		}()
 		// 同步删除本地 lru 缓存
 		c.lru.Remove(shortUrl)
-
 	}
 	return err
 }
@@ -233,7 +234,7 @@ func (c *CachedShortUrlRepository) CleanExpired(ctx context.Context, now int64) 
 	return err
 }
 
-// RebuildBloomFilter 重建布隆过滤器
+// 重建布隆过滤器
 func (c *CachedShortUrlRepository) RebuildBloomFilter(ctx context.Context) error {
 	// 获取所有未过期的短链接
 	shortUrls, err := c.dao.FindAllValidShortUrls(ctx, time.Now().Unix())

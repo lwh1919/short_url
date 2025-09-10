@@ -15,7 +15,7 @@ func main() {
 	}
 }
 
-const projectRoot = "C:/Users/linweihao/Desktop/demo/st/short_url_rpc_study/rpc"
+const projectRoot = "C:\\Users\\linweihao\\Desktop\\demo\\st\\tt\\short_url-main\\rpc"
 
 func initViperWatch() {
 	cfile := pflag.String("config",

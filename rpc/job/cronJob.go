@@ -1,10 +1,11 @@
 package job
 
 import (
+	"time"
+
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 	"github.com/to404hanga/pkg404/logger"
-	"time"
 )
 
 type CronJobBuilder struct {
@@ -12,13 +13,9 @@ type CronJobBuilder struct {
 }
 
 func NewCronJobBuilder(l logger.Logger) *CronJobBuilder {
-	return &CronJobBuilder{l: l}
-}
-
-type cronJobAdapterFunc func()
-
-func (f cronJobAdapterFunc) Run() {
-	f()
+	return &CronJobBuilder{
+		l: l,
+	}
 }
 
 func (b *CronJobBuilder) Build(job Job) cron.Job {
@@ -39,5 +36,10 @@ func (b *CronJobBuilder) Build(job Job) cron.Job {
 			b.l.Debug("Job disabled", logger.String("name", name))
 		}
 	})
+}
 
+type cronJobAdapterFunc func()
+
+func (f cronJobAdapterFunc) Run() {
+	f()
 }

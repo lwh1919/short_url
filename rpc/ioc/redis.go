@@ -2,9 +2,8 @@ package ioc
 
 import (
 	"fmt"
+	"short_url/pkg/bloom"
 	"time"
-
-	"short_url_rpc_study/pkg/bloom"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"

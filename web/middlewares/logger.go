@@ -1,9 +1,10 @@
 package middlewares
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/to404hanga/pkg404/logger"
-	"time"
 )
 
 func ZapLogger(l logger.Logger) gin.HandlerFunc {
@@ -12,7 +13,7 @@ func ZapLogger(l logger.Logger) gin.HandlerFunc {
 		query := c.Request.URL.RawQuery
 
 		start := time.Now()
-		//处理请求
+		// 处理请求
 		c.Next()
 		duration := time.Since(start).Milliseconds()
 

@@ -63,7 +63,7 @@
 ## 🏗️ 项目架构
 
 ```
-short_url_rpc_study/
+short_url/
 ├── rpc/                    # gRPC服务端
 │   ├── main.go            # RPC服务入口
 │   ├── app.go             # RPC应用初始化
@@ -77,7 +77,13 @@ short_url_rpc_study/
 │   ├── repository/        # 数据访问层
 │   │   ├── shortUrl.go    # 数据访问接口
 │   │   ├── dao/           # 数据访问对象
+│   │   │   ├── init.go    # 数据库初始化
+│   │   │   ├── shortUrl.go # 短链接DAO
+│   │   │   └── type.go    # DAO类型定义
 │   │   ├── cache/         # 缓存层
+│   │   │   ├── bloomFilterManager.go # 布隆过滤器管理
+│   │   │   ├── shortUrl.go # 短链接缓存
+│   │   │   └── type.go    # 缓存类型定义
 │   │   └── type.go        # 数据类型定义
 │   ├── job/               # 定时任务
 │   │   ├── cleaner.go     # 清理任务
@@ -130,6 +136,8 @@ short_url_rpc_study/
 │   │   ├── lua.go       # Lua脚本
 │   │   ├── redis_client.go # Redis客户端
 │   │   └── scripts/     # Lua脚本文件
+│   │       ├── bloom_get.lua
+│   │       └── bloom_set.lua
 │   ├── generator/       # 短链接生成器
 │   │   ├── charset.go   # 字符集定义
 │   │   ├── generator.go # 生成器实现
@@ -137,24 +145,31 @@ short_url_rpc_study/
 │   ├── go-redis-tokenbuket/ # Redis令牌桶限流
 │   │   ├── ratelimit.go # 限流实现
 │   │   └── scripts/     # Lua脚本
+│   │       └── token_bucket.lua
 │   ├── logfile/         # 日志文件处理
 │   │   └── logfile.go
+│   ├── sharding/        # 分片策略
+│   │   └── firstCharSharding.go # 首字符分片
 │   └── sign/            # 签名验证
 │       ├── epay/        # 支付相关签名
+│       │   ├── epay.go
+│       │   └── epay_test.go
 │       └── type.go      # 签名类型定义
 ├── proto/               # Protocol Buffers定义
-│   └── short_url/
-│       ├── short_url.proto
-│       └── v1/
+│   ├── short_url/
+│   │   └── v1/
+│   │       ├── short_url.pb.go
+│   │       └── short_url_grpc.pb.go
+│   └── short_url.proto  # Protocol Buffers定义
 ├── scripts/             # 数据库初始化脚本
 │   ├── etcd_data/       # etcd数据脚本
 │   └── mysql/
+│       ├── export_short_urls.go # 数据导出工具
 │       └── init.sql     # MySQL初始化脚本
 ├── nginx/               # Nginx配置
 │   └── nginx.conf       # Nginx配置文件
 ├── test/                # 测试文件
-│   ├── nginx_limit_test.go
-│   └── web_limit_test.go
+│   └── mem_test.go      # 内存测试
 ├── go.mod               # Go模块文件
 ├── go.sum               # Go依赖校验文件
 ├── docker-compose.yaml  # 容器编排
@@ -188,3 +203,37 @@ go run main.go --config config/config.template.yaml
 - Web界面: http://localhost:8080
 - API接口: http://localhost:8080/api/shorten
 - 健康检查: http://localhost:8080/health
+- ginx代理: http://localhost:8888/
+### 6. 测试
+//test1:
+@"                                                                     
+
+>> wrk.method = "POST"                             
+>> wrk.headers["Content-Type"] = "application/json"
+>>
+>> -- 初始化随机种子（确保每次运行生成不同随机值）
+>> function init(args)
+>>     math.randomseed(os.time() * 1000 + math.random(1, 1000))
+>> end
+>>
+>> function randomString(length, charset)
+>>     local res = ""
+>>     for i = 1, length do
+>>         local rand = math.random(#charset)
+>>         res = res .. string.sub(charset, rand, rand)
+>>     end
+>>     return res
+>> end
+>>
+>> function request()
+>>     local charset = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+="
+>>     local randomStr = randomString(200, charset)
+>>     local body = string.format('{"origin_url": "%s"}', randomStr)
+>>     return wrk.format(nil, nil, nil, body)
+>> end
+>> "@ | Out-File -FilePath create.lua -Encoding utf8
+
+
+docker run --rm -v ${PWD}:/scripts williamyeh/wrk `
+>>   -c 50 -d 10s -t 4 -s /scripts/create.lua `
+>>   http://host.docker.internal:8080/api/create

@@ -1,8 +1,8 @@
 package ioc
 
 import (
-	"short_url_rpc_study/rpc/job"
-	"short_url_rpc_study/rpc/service"
+	"short_url/rpc/job"
+	"short_url/rpc/service"
 	"time"
 
 	"github.com/robfig/cron/v3"

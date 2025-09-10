@@ -2,10 +2,10 @@ package ioc
 
 import (
 	"fmt"
-	"short_url_rpc_study/pkg/bloom"
-	"short_url_rpc_study/rpc/repository"
-	"short_url_rpc_study/rpc/repository/cache"
-	"short_url_rpc_study/rpc/repository/dao"
+	"short_url/pkg/bloom"
+	"short_url/rpc/repository"
+	"short_url/rpc/repository/cache"
+	"short_url/rpc/repository/dao"
 	"time"
 
 	"github.com/shirou/gopsutil/mem"
@@ -36,7 +36,7 @@ func InitCachedRepository(cache cache.ShortUrlCache, bloomFilter cache.BloomFilt
 		 *    我们认为使用 lru 缓存时，每一对 (短链接, 原链接) 的键值对所占内存约为 256 字节，
 		 *    短链接和原链接均采用 ascii 编码，
 		 *    短链接长度为 7，原链接最大长度为 200
-		 *    2. 关于 cfg.Percentage 的值的选取
+		 * 2. 关于 cfg.Percentage 的值的选取
 		 *    一般为 1% ~ 5%，可取中间值 3%
 		 */
 		cfg.Size = int(float64(v.Total) / 100 * cfg.Percentage / 256)

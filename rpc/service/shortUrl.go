@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"short_url_rpc_study/pkg/generator"
-	"short_url_rpc_study/rpc/repository"
+	"short_url/pkg/generator"
+	"short_url/rpc/repository"
 	"time"
 
 	"github.com/to404hanga/pkg404/logger"
@@ -42,6 +42,7 @@ func (s *CachedShortUrlService) Create(ctx context.Context, originUrl string) (s
 		}
 	}
 }
+
 func (s *CachedShortUrlService) Redirect(ctx context.Context, shortUrl string) (string, error) {
 	return s.repo.GetOriginUrlByShortUrl(ctx, shortUrl)
 }
@@ -50,7 +51,6 @@ func (s *CachedShortUrlService) CleanExpired(ctx context.Context) error {
 	now := time.Now().Unix()
 	return s.repo.CleanExpired(ctx, now)
 }
-
 func (s *CachedShortUrlService) RebuildBloomFilter(ctx context.Context) error {
 	return s.repo.RebuildBloomFilter(ctx)
 }

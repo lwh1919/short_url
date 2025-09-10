@@ -1,7 +1,7 @@
 package ioc
 
 import (
-	short_url_v1 "short_url_rpc_study/proto/short_url/v1"
+	short_url_v1 "short_url/proto/short_url/v1"
 
 	"github.com/spf13/viper"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -35,6 +35,5 @@ func InitShortUrlClient(ecli *clientv3.Client) short_url_v1.ShortUrlServiceClien
 	if err != nil {
 		panic(err)
 	}
-
 	return short_url_v1.NewShortUrlServiceClient(cc)
 }

@@ -3,9 +3,9 @@
 package main
 
 import (
-	"short_url_rpc_study/rpc/grpc"
-	"short_url_rpc_study/rpc/ioc"
-	"short_url_rpc_study/rpc/repository/dao"
+	"short_url/rpc/grpc"
+	"short_url/rpc/ioc"
+	"short_url/rpc/repository/dao"
 
 	"github.com/google/wire"
 )

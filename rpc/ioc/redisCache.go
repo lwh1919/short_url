@@ -1,7 +1,7 @@
 package ioc
 
 import (
-	"short_url_rpc_study/rpc/repository/cache"
+	"short_url/rpc/repository/cache"
 	"time"
 
 	"github.com/redis/go-redis/v9"

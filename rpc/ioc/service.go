@@ -1,15 +1,14 @@
 package ioc
 
 import (
-	"short_url_rpc_study/rpc/repository"
-	"short_url_rpc_study/rpc/service"
+	"short_url/rpc/repository"
+	"short_url/rpc/service"
 
 	"github.com/spf13/viper"
 	"github.com/to404hanga/pkg404/logger"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// 本地配置和etcd配置
 func InitService(ecli *clientv3.Client, repo repository.ShortUrlRepository, l logger.Logger) service.ShortUrlService {
 	type Config struct {
 		Suffix string `yaml:"suffix"`

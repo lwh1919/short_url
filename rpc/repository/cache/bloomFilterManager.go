@@ -3,7 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
-	"short_url_rpc_study/pkg/bloom"
+	"short_url/pkg/bloom"
 	"sync/atomic"
 )
 

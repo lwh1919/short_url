@@ -7,19 +7,17 @@
 package main
 
 import (
-	"short_url_rpc_study/web/ioc"
-	"short_url_rpc_study/web/routes"
+	"github.com/gin-gonic/gin"
+	"short_url/web/ioc"
+	"short_url/web/routes"
 )
 
 // Injectors from wire.go:
 
-func Init() (*App, error) {
+func Init() *gin.Engine {
 	logger := ioc.InitLogger()
 	cmdable := ioc.InitRedis()
-	rateLimiter, err := ioc.InitRateLimiter(cmdable)
-	if err != nil {
-		return nil, err
-	}
+	rateLimiter, _ := ioc.InitRateLimiter(cmdable)
 	v := ioc.InitGinMiddleware(logger, rateLimiter)
 	client := ioc.InitEtcdClient()
 	shortUrlServiceClient := ioc.InitShortUrlClient(client)
@@ -28,8 +26,6 @@ func Init() (*App, error) {
 	string2 := ioc.InitHystrix()
 	healthHandler := routes.NewHealthHandler(string2)
 	engine := ioc.InitWebServer(v, apiHandler, serverHandler, healthHandler)
-	app := &App{
-		Engine: engine,
-	}
-	return app, nil
+
+	return engine
 }

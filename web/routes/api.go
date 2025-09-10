@@ -4,7 +4,7 @@ import (
 	"github.com/afex/hystrix-go/hystrix"
 	"log"
 	"net/http"
-	short_url_v1 "short_url_rpc_study/proto/short_url/v1"
+	short_url_v1 "short_url/proto/short_url/v1"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +32,7 @@ func (ah *ApiHandler) Create(ctx *gin.Context) {
 		OriginUrl string `json:"origin_url"`
 	}
 	var req CreateRequest
-	if err := ctx.ShouldBind(&req); err != nil {
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

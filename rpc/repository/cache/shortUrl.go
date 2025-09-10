@@ -9,12 +9,11 @@ import (
 )
 
 type RedisShortUrlCache struct {
-	cmd        redis.Cmdable //Redis操作接口（兼容单机和集群）
+	cmd        redis.Cmdable
 	prefix     string
 	expiration time.Duration
 }
 
-// 检查RedisShortUrlCache实现ShortUrlCache的所有接口了吗
 var _ ShortUrlCache = (*RedisShortUrlCache)(nil)
 
 func NewRedisShortUrlCache(cmd redis.Cmdable, prefix string, expiration time.Duration) ShortUrlCache {
@@ -25,21 +24,23 @@ func NewRedisShortUrlCache(cmd redis.Cmdable, prefix string, expiration time.Dur
 	}
 }
 
-func (r *RedisShortUrlCache) key(shortUrl string) string {
-	return r.prefix + ":" + shortUrl
-}
-
 func (r *RedisShortUrlCache) Get(ctx context.Context, shortUrl string) (originUrl string, err error) {
 	return r.cmd.Get(ctx, r.key(shortUrl)).Result()
 }
 
 func (r *RedisShortUrlCache) Set(ctx context.Context, shortUrl string, originUrl string) error {
-	return r.cmd.Set(ctx, r.key(shortUrl), originUrl, r.expiration+time.Duration(rand.IntN(7201)-3600)).Err()
+	_, err := r.cmd.Set(ctx, r.key(shortUrl), originUrl, r.expiration+time.Duration(rand.IntN(7201)-3600)).Result() // 随机加减一小时过期时间
+	return err
 }
 
 func (r *RedisShortUrlCache) Del(ctx context.Context, shortUrl string) error {
 	return r.cmd.Del(ctx, r.key(shortUrl)).Err()
 }
+
 func (r *RedisShortUrlCache) Refresh(ctx context.Context, shortUrl string) error {
 	return r.cmd.Expire(ctx, r.key(shortUrl), r.expiration+time.Duration(rand.IntN(7201)-3600)).Err() // 随机加减一小时过期时间
+}
+
+func (r *RedisShortUrlCache) key(shortUrl string) string {
+	return r.prefix + ":" + shortUrl
 }

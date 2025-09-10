@@ -3,8 +3,8 @@ package ioc
 import (
 	"context"
 	"fmt"
-	go_redis_tokenbucket "short_url_rpc_study/pkg/go-redis-tokenbuket"
-	"short_url_rpc_study/web/pkg"
+	go_redis_tokenbucket "short_url/pkg/go-redis-tokenbuket"
+	"short_url/web/pkg"
 	"time"
 
 	"github.com/redis/go-redis/v9"
