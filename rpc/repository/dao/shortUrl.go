@@ -5,14 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"short_url/pkg/generator"
-	"sync"
-	"time"
-
+	"github.com/panjf2000/ants/v2"
 	"github.com/to404hanga/pkg404/logger"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"runtime"
+	"short_url/pkg/generator"
+	"sync"
+	"time"
 )
 
 type GormShortUrlDAO struct {
@@ -29,6 +30,8 @@ type GormShortUrlDAO struct {
 	flushPool     sync.Pool       // 用于批量处理的slice池
 	flushChan     chan []ShortUrl // 用于异步刷新
 	mu            sync.Mutex      // 保护缓冲区访问
+	antsPool      *ants.Pool      // ants协程池
+	closed        bool            // 标记是否已关闭
 }
 
 func (g *GormShortUrlDAO) batchWorker() {
@@ -138,8 +141,27 @@ func (g *GormShortUrlDAO) flushBatch(ctx context.Context, batch []ShortUrl) {
 }
 
 func (g *GormShortUrlDAO) Close() error {
+	g.mu.Lock()
+	if g.closed {
+		g.mu.Unlock()
+		return nil
+	}
+	g.closed = true
+	g.mu.Unlock()
+
+	// 1. 停止batch worker
 	close(g.stopChan)
+
+	// 2. 等待batch worker完成
 	g.wg.Wait()
+
+	// 3. 关闭flush channel
+	close(g.flushChan)
+
+	// 4. 等待ants协程池中的任务完成并释放资源
+	g.antsPool.Release()
+
+	g.l.Info("GormShortUrlDAO closed successfully")
 	return nil
 }
 
@@ -152,6 +174,27 @@ var (
 )
 
 func NewGormShortUrlDAO(db *gorm.DB, l logger.Logger) ShortUrlDAO {
+	// 计算协程池大小：I/O密集型任务，使用CPU核心数的3倍
+	cpuCount := runtime.NumCPU()
+	poolSize := cpuCount * 3
+	if poolSize < 4 {
+		poolSize = 4 // 最小保证4个协程
+	}
+
+	// 创建ants协程池
+	antsPool, err := ants.NewPool(poolSize,
+		ants.WithPreAlloc(true),         // 预分配内存，提高性能
+		ants.WithMaxBlockingTasks(1000), // 最大阻塞任务数
+		ants.WithPanicHandler(func(p interface{}) {
+			l.Error("Ants pool panic recovered", logger.Any("panic", p))
+		}),
+	)
+	if err != nil {
+		l.Error("Failed to create ants pool", logger.Error(err))
+		panic(err)
+	}
+
+	flushChanBuffer := 10
 	dao := &GormShortUrlDAO{
 		db:            db,
 		l:             l,
@@ -160,7 +203,9 @@ func NewGormShortUrlDAO(db *gorm.DB, l logger.Logger) ShortUrlDAO {
 		batchSize:     1000,
 		flushInterval: 50 * time.Millisecond,
 		stopChan:      make(chan struct{}),
-		flushChan:     make(chan []ShortUrl, 10), // 10个并发刷新
+		antsPool:      antsPool,
+		flushChan:     make(chan []ShortUrl, flushChanBuffer),
+		closed:        false,
 	}
 
 	// 初始化slice池
@@ -168,20 +213,41 @@ func NewGormShortUrlDAO(db *gorm.DB, l logger.Logger) ShortUrlDAO {
 		return make([]ShortUrl, 0, dao.batchSize)
 	}
 
-	// 启动批量处理goroutine
+	// 启动batch worker
 	dao.wg.Add(1)
 	go dao.batchWorker()
 
-	// 启动异步刷新worker
-	for i := 0; i < 5; i++ {
-		go func() {
-			for batch := range dao.flushChan {
+	// 启动batch消费者goroutine - 串行消费，并发执行
+	dao.wg.Add(1)
+	go func() {
+		defer dao.wg.Done()
+		for batch := range dao.flushChan {
+			// 使用ants协程池处理batch，正确处理错误
+			batchCopy := batch // 避免闭包问题
+			err := dao.antsPool.Submit(func() {
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-				dao.flushBatch(ctx, batch)
+				defer cancel()
+				dao.flushBatch(ctx, batchCopy)
+			})
+			if err != nil {
+				// 如果协程池提交失败，同步执行以避免数据丢失
+				l.Error("Failed to submit batch to ants pool, executing synchronously",
+					logger.Error(err),
+					logger.Int("batch_size", len(batchCopy)))
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+				dao.flushBatch(ctx, batchCopy)
 				cancel()
 			}
-		}()
-	}
+		}
+	}()
+
+	// 记录协程池大小
+	l.Info("ShortUrlDAO initialized with ants pool and channel",
+		logger.Int("cpu_count", cpuCount),
+		logger.Int("pool_size", poolSize),
+		logger.Int("buffer_size", dao.bufferSize),
+		logger.Int("batch_size", dao.batchSize),
+		logger.Int("flush_chan_buffer", flushChanBuffer))
 
 	return dao
 }
@@ -516,13 +582,6 @@ func (g *GormShortUrlDAO) Transaction(ctx context.Context, fc func(tx *gorm.DB) 
 	}, opts...)
 }
 
-func (g *GormShortUrlDAO) WithTransaction(ctx context.Context, fc func(txDAO ShortUrlDAO) error, opts ...*sql.TxOptions) error {
-	return g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		txDAO := &GormShortUrlDAO{db: tx}
-		return fc(txDAO)
-	}, opts...)
-}
-
 // FindAllValidShortUrls 获取所有未过期的短链接
 func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) ([]ShortUrl, error) {
 	var (
@@ -551,4 +610,14 @@ func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) 
 	})
 
 	return sus, nil
+}
+func (g *GormShortUrlDAO) WithTransaction(ctx context.Context, fc func(txDAO ShortUrlDAO) error, opts ...*sql.TxOptions) error {
+	return g.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 事务中的DAO不需要ants协程池，直接使用同步操作
+		txDAO := &GormShortUrlDAO{
+			db: tx,
+			l:  g.l,
+		}
+		return fc(txDAO)
+	}, opts...)
 }
