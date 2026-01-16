@@ -287,32 +287,65 @@ func (g *GormShortUrlDAO) FindByShortUrl(ctx context.Context, shortUrl string) (
 }
 
 func (g *GormShortUrlDAO) FindByOriginUrlWithExpired(ctx context.Context, originUrl string, now int64) (ShortUrl, error) {
-	var su ShortUrl
-	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	var (
+		su    ShortUrl
+		lock  sync.Mutex
+		found bool
+	)
+
+	// 使用 errgroup.WithContext 创建支持自动取消的 group
+	group, groupCtx := errgroup.WithContext(ctx)
+	groupCtx, cancel := context.WithTimeout(groupCtx, time.Second*10)
 	defer cancel()
-	var wg sync.WaitGroup
-	wg.Add(62)
+
+	// 启动62个并发查询
 	for i := 0; i < 62; i++ {
-		go func(internalCtx context.Context, suffix string) {
-			defer wg.Done()
+		suffix := string(generator.BASE62CHARSET[i])
+		group.Go(func() error {
+			// 检查是否已经找到结果或context已取消
 			select {
-			case <-internalCtx.Done():
-				return
+			case <-groupCtx.Done():
+				return groupCtx.Err()
 			default:
-				var internalSu ShortUrl
-				if err := g.db.WithContext(internalCtx).
-					Table(g.tableName(suffix)).
-					Where("origin_url = ?", originUrl).
-					Where("expired_at > ?", now).
-					First(&internalSu).Error; err == nil {
-					su = internalSu
-					cancel()
-				}
 			}
-		}(newCtx, string(generator.BASE62CHARSET[i]))
+
+			var internalSu ShortUrl
+			err := g.db.WithContext(groupCtx).
+				Table(g.tableName(suffix)).
+				Where("origin_url = ?", originUrl).
+				Where("expired_at > ?", now).
+				First(&internalSu).Error
+
+			if err != nil {
+				// 记录非"未找到"的错误，但不中断其他查询
+				if err != gorm.ErrRecordNotFound {
+					g.l.Error("FindByOriginUrlWithExpired query failed",
+						logger.Error(err),
+						logger.String("suffix", suffix),
+						logger.String("origin_url", originUrl),
+					)
+				}
+				return nil // 返回 nil 表示这个查询未找到，但不影响其他查询
+			}
+
+			// 找到结果，设置并取消其他查询
+			lock.Lock()
+			if !found {
+				su = internalSu
+				found = true
+				cancel() // 取消其他查询
+			}
+			lock.Unlock()
+			return nil
+		})
 	}
-	wg.Wait()
-	if su.ShortUrl == "" {
+
+	// 等待所有查询完成
+	if err := group.Wait(); err != nil && err != context.Canceled {
+		return ShortUrl{}, err
+	}
+
+	if !found {
 		return ShortUrl{}, ErrDataNotFound
 	}
 	return su, nil
@@ -323,7 +356,7 @@ func (g *GormShortUrlDAO) FindByOriginUrlWithExpiredV1(ctx context.Context, orig
 		su   ShortUrl
 		lock sync.Mutex
 	)
-	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+	err := g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
 		var internalSu ShortUrl
 		if err := db.WithContext(iCtx).
 			Table(g.tableName(suffix)).
@@ -343,6 +376,9 @@ func (g *GormShortUrlDAO) FindByOriginUrlWithExpiredV1(ctx context.Context, orig
 		lock.Unlock()
 		return nil
 	})
+	if err != nil && err != context.Canceled {
+		return ShortUrl{}, err
+	}
 	if su.ShortUrl == "" {
 		return ShortUrl{}, ErrDataNotFound
 	}
@@ -350,31 +386,64 @@ func (g *GormShortUrlDAO) FindByOriginUrlWithExpiredV1(ctx context.Context, orig
 }
 
 func (g *GormShortUrlDAO) FindByOriginUrl(ctx context.Context, originUrl string) (ShortUrl, error) {
-	var su ShortUrl
-	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	var (
+		su    ShortUrl
+		lock  sync.Mutex
+		found bool
+	)
+
+	// 使用 errgroup.WithContext 创建支持自动取消的 group
+	group, groupCtx := errgroup.WithContext(ctx)
+	groupCtx, cancel := context.WithTimeout(groupCtx, time.Second*10)
 	defer cancel()
-	var wg sync.WaitGroup
-	wg.Add(62)
+
+	// 启动62个并发查询
 	for i := 0; i < 62; i++ {
-		go func(internalCtx context.Context, suffix string) {
-			defer wg.Done()
+		suffix := string(generator.BASE62CHARSET[i])
+		group.Go(func() error {
+			// 检查是否已经找到结果或context已取消
 			select {
-			case <-internalCtx.Done():
-				return
+			case <-groupCtx.Done():
+				return groupCtx.Err()
 			default:
-				var internalSu ShortUrl
-				if err := g.db.WithContext(internalCtx).
-					Table(g.tableName(suffix)).
-					Where("origin_url = ?", originUrl).
-					First(&internalSu).Error; err == nil {
-					su = internalSu
-					cancel()
-				}
 			}
-		}(newCtx, string(generator.BASE62CHARSET[i]))
+
+			var internalSu ShortUrl
+			err := g.db.WithContext(groupCtx).
+				Table(g.tableName(suffix)).
+				Where("origin_url = ?", originUrl).
+				First(&internalSu).Error
+
+			if err != nil {
+				// 记录非"未找到"的错误，但不中断其他查询
+				if err != gorm.ErrRecordNotFound {
+					g.l.Error("FindByOriginUrl query failed",
+						logger.Error(err),
+						logger.String("suffix", suffix),
+						logger.String("origin_url", originUrl),
+					)
+				}
+				return nil // 返回 nil 表示这个查询未找到，但不影响其他查询
+			}
+
+			// 找到结果，设置并取消其他查询
+			lock.Lock()
+			if !found {
+				su = internalSu
+				found = true
+				cancel() // 取消其他查询
+			}
+			lock.Unlock()
+			return nil
+		})
 	}
-	wg.Wait()
-	if su.ShortUrl == "" {
+
+	// 等待所有查询完成
+	if err := group.Wait(); err != nil && err != context.Canceled {
+		return ShortUrl{}, err
+	}
+
+	if !found {
 		return ShortUrl{}, ErrDataNotFound
 	}
 	return su, nil
@@ -385,7 +454,7 @@ func (g *GormShortUrlDAO) FindByOriginUrlV1(ctx context.Context, originUrl strin
 		su   ShortUrl
 		lock sync.Mutex
 	)
-	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+	err := g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
 		var internalSu ShortUrl
 		if err := db.WithContext(iCtx).
 			Table(g.tableName(suffix)).
@@ -403,6 +472,9 @@ func (g *GormShortUrlDAO) FindByOriginUrlV1(ctx context.Context, originUrl strin
 		lock.Unlock()
 		return nil
 	})
+	if err != nil && err != context.Canceled {
+		return ShortUrl{}, err
+	}
 	if su.ShortUrl == "" {
 		return ShortUrl{}, ErrDataNotFound
 	}
@@ -412,33 +484,55 @@ func (g *GormShortUrlDAO) FindByOriginUrlV1(ctx context.Context, originUrl strin
 func (g *GormShortUrlDAO) FindExpiredList(ctx context.Context, now int64) ([]ShortUrl, error) {
 	var (
 		sus  []ShortUrl
-		wg   sync.WaitGroup
 		lock sync.Mutex
 	)
-	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+
+	// 使用 errgroup.WithContext 创建支持自动取消的 group
+	group, groupCtx := errgroup.WithContext(ctx)
+	groupCtx, cancel := context.WithTimeout(groupCtx, time.Second*10)
 	defer cancel()
-	wg.Add(62)
+
+	// 启动62个并发查询
 	for i := 0; i < 62; i++ {
-		go func(internalCtx context.Context, suffix string) {
-			defer wg.Done()
+		suffix := string(generator.BASE62CHARSET[i])
+		group.Go(func() error {
+			// 检查context是否已取消
 			select {
-			case <-internalCtx.Done():
-				return
+			case <-groupCtx.Done():
+				return groupCtx.Err()
 			default:
-				var internalSus []ShortUrl
-				if err := g.db.WithContext(internalCtx).
-					Table(g.tableName(suffix)).
-					Where("expired_at <=?", now).
-					Find(&internalSus).Error; err == nil {
-					lock.Lock()
-					sus = append(sus, internalSus...)
-					lock.Unlock()
-					cancel()
-				}
 			}
-		}(newCtx, string(generator.BASE62CHARSET[i]))
+
+			var internalSus []ShortUrl
+			err := g.db.WithContext(groupCtx).
+				Table(g.tableName(suffix)).
+				Where("expired_at <= ?", now).
+				Find(&internalSus).Error
+
+			if err != nil {
+				g.l.Error("FindExpiredList query failed",
+					logger.Error(err),
+					logger.String("suffix", suffix),
+					logger.Int64("expired_at", now),
+				)
+				return err
+			}
+
+			// 收集结果
+			if len(internalSus) > 0 {
+				lock.Lock()
+				sus = append(sus, internalSus...)
+				lock.Unlock()
+			}
+			return nil
+		})
 	}
-	wg.Wait()
+
+	// 等待所有查询完成
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+
 	if len(sus) == 0 {
 		return nil, ErrDataNotFound
 	}
@@ -450,7 +544,7 @@ func (g *GormShortUrlDAO) FindExpiredListV1(ctx context.Context, now int64) ([]S
 		sus  []ShortUrl
 		lock sync.Mutex
 	)
-	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+	err := g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
 		var internalSus []ShortUrl
 		err := db.WithContext(iCtx).
 			Table(g.tableName(suffix)).
@@ -469,6 +563,9 @@ func (g *GormShortUrlDAO) FindExpiredListV1(ctx context.Context, now int64) ([]S
 		lock.Unlock()
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	if len(sus) == 0 {
 		return nil, ErrDataNotFound
 	}
@@ -476,25 +573,34 @@ func (g *GormShortUrlDAO) FindExpiredListV1(ctx context.Context, now int64) ([]S
 }
 
 // 批量执行不分表操作的抽象方法
-func (g *GormShortUrlDAO) executeUnshardedQuery(ctx context.Context, fn func(iCtx context.Context, suffix string, db *gorm.DB) error) {
-	var wg sync.WaitGroup
-	newCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+func (g *GormShortUrlDAO) executeUnshardedQuery(ctx context.Context, fn func(iCtx context.Context, suffix string, db *gorm.DB) error) error {
+	// 使用 errgroup.WithContext 创建支持自动取消的 group
+	group, groupCtx := errgroup.WithContext(ctx)
+	groupCtx, cancel := context.WithTimeout(groupCtx, time.Second*10)
 	defer cancel()
-	wg.Add(62)
+
+	// 启动62个并发查询
 	for i := 0; i < 62; i++ {
-		go func(internalCtx context.Context, suffix string) {
-			defer wg.Done()
+		suffix := string(generator.BASE62CHARSET[i])
+		group.Go(func() error {
+			// 检查context是否已取消
 			select {
-			case <-internalCtx.Done():
-				return
+			case <-groupCtx.Done():
+				return groupCtx.Err()
 			default:
-				if err := fn(internalCtx, suffix, g.db); err == nil {
-					cancel()
-				}
 			}
-		}(newCtx, string(generator.BASE62CHARSET[i]))
+
+			err := fn(groupCtx, suffix, g.db)
+			if err == nil {
+				// 成功找到结果，取消其他查询
+				cancel()
+			}
+			return err
+		})
 	}
-	wg.Wait()
+
+	// 等待所有查询完成，返回第一个错误（如果有）
+	return group.Wait()
 }
 
 func (g *GormShortUrlDAO) DeleteByShortUrl(ctx context.Context, shortUrl string) error {
@@ -552,7 +658,7 @@ func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) 
 		lock sync.Mutex
 	)
 
-	g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
+	err := g.executeUnshardedQuery(ctx, func(iCtx context.Context, suffix string, db *gorm.DB) error {
 		var internalSus []ShortUrl
 		err := db.WithContext(iCtx).
 			Table(g.tableName(suffix)).
@@ -572,6 +678,9 @@ func (g *GormShortUrlDAO) FindAllValidShortUrls(ctx context.Context, now int64) 
 		return nil
 	})
 
+	if err != nil {
+		return nil, err
+	}
 	return sus, nil
 }
 func (g *GormShortUrlDAO) WithTransaction(ctx context.Context, fc func(txDAO ShortUrlDAO) error, opts ...*sql.TxOptions) error {
